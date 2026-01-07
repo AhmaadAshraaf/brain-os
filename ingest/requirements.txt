@@ -1,0 +1,6 @@
+# Ingest Service Dependencies
+unstructured[all-docs]>=0.10.0
+qdrant-client>=1.7.0
+sentence-transformers>=2.2.0
+python-dotenv>=1.0.0
+structlog>=23.0.0

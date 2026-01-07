@@ -1,0 +1,37 @@
+version: "3.8"
+
+# Production overrides (VM) - includes ingest service
+services:
+  ingest:
+    build:
+      context: ../ingest
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    volumes:
+      - ../data/documents:/app/documents:ro
+      - ingest_cache:/app/cache
+    depends_on:
+      qdrant:
+        condition: service_healthy
+
+  # Prometheus for monitoring (VM only)
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+volumes:
+  ingest_cache:
+  prometheus_data:

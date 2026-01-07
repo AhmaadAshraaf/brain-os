@@ -1,0 +1,13 @@
+version: "3.8"
+
+# Local/Offline overrides (Laptop) - read-only Qdrant, no ingest
+services:
+  qdrant:
+    # Override to use snapshot data directory
+    volumes:
+      - ../data/qdrant_snapshot:/qdrant/storage:ro
+
+  ollama:
+    # Remove GPU reservation for laptops without NVIDIA GPU
+    deploy:
+      resources: {}
