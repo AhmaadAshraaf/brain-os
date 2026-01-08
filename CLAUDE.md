@@ -56,16 +56,28 @@ The `/query` endpoint returns Linear (Sparse) + Non-Linear (Dense) results:
 
 ### Ingest Pipeline Architecture (VM Only)
 
-The ingest service (`ingest/src/main.py`) processes documents through:
+The ingest service (`ingest/src/main.py`) has two main classes:
+- **`DocumentProcessor`** - Orchestrates the pipeline: watches directory, parses PDFs, sends to vector client
+- **`QdrantVectorClient`** - Handles embedding generation (sentence-transformers) and Qdrant upserts
+
+Processing flow:
 1. **PDF Parsing** - Uses `unstructured.partition.pdf` with `strategy="hi_res"` and `infer_table_structure=True`
-2. **Table Flattening** - Tables are converted to searchable text: `"Table data: {content}"`
-3. **Metadata Enrichment** - Each chunk stores `source`, `page_number`, `element_type`
-4. **Vectorization** - Embeds text using sentence-transformers, upserts to Qdrant with hybrid search (sparse+dense)
+2. **Table Flattening** - Tables are converted to searchable text: `"Table data: {content}"` (enables Deep Research extraction)
+3. **Metadata Enrichment** - Each `DocumentChunk` stores `source`, `page_number`, `element_type`
+4. **Hybrid Vectorization** - Dense vectors via sentence-transformers + sparse vectors via term frequency, upserted to Qdrant
 
 **System Dependencies (required on VM):**
 ```bash
 apt-get install -y poppler-utils tesseract-ocr
 ```
+
+### Deep Research Prompting (API)
+
+The `/query` endpoint formats citations for LLM synthesis with source attribution:
+```python
+f"SOURCE: {source} | PAGE: {page}\nCONTENT: {text}"
+```
+The LLM is instructed to cite claims as `[Source_Name, Page_X]` and extract numerical data from flattened tables.
 
 ### Snapshot Workflow
 
@@ -100,6 +112,8 @@ cd api && pytest -v --tb=long           # Verbose output with full tracebacks
 ```
 
 Tests use `use_mock_clients=True` by default, so no external services needed.
+
+**Import Pattern:** Tests import from `api.src.app` (not `src.app`) - run pytest from the `api/` directory or project root.
 
 ### Scripts
 
