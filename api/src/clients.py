@@ -1,142 +1,125 @@
-"""
-Client abstractions for Qdrant and Ollama.
+"""Real and Mock clients for external services (Qdrant & Ollama)."""
 
-Uses Protocol classes for interface definitions, allowing easy swapping
-between mock and real implementations.
-"""
-
-from abc import ABC, abstractmethod
+import httpx
+from qdrant_client import QdrantClient
+from sentence_transformers import SentenceTransformer
+from typing import Protocol, List, Dict, Any
 from dataclasses import dataclass
-
-from .models import Citation
-
 
 @dataclass
 class SearchResult:
-    """Raw search result from vector database."""
-
-    source: str
-    page: int
     text: str
-    score: float
+    metadata: Dict[str, Any]
 
+class VectorDBClient(Protocol):
+    def search(self, query: str, collection: str, top_k: int) -> List[SearchResult]: ...
 
-class VectorDBClient(ABC):
-    """Abstract interface for vector database operations."""
+class LLMClient(Protocol):
+    def synthesize(self, query: str, context: List[str]) -> str: ...
 
-    @abstractmethod
-    def search(
-        self, query: str, collection: str, top_k: int
-    ) -> list[SearchResult]:
-        """
-        Perform hybrid search (sparse + dense) on the collection.
+# --- REAL CLIENTS ---
 
-        Args:
-            query: The search query text
-            collection: Name of the collection to search
-            top_k: Maximum number of results to return
+class RealVectorDBClient(VectorDBClient):
+    """Actual Qdrant client using Sentence Transformers for embeddings."""
 
-        Returns:
-            List of SearchResult objects sorted by relevance
-        """
-        pass
+    def __init__(self, host: str, port: int):
+        # We initialize the Synchronous client to match your app logic
+        self.client = QdrantClient(host=host, port=port)
+        # Logic: Must match the model used in ingest.src.main
+        self.model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-
-class LLMClient(ABC):
-    """Abstract interface for LLM operations."""
-
-    @abstractmethod
-    def synthesize(self, query: str, context: list[str]) -> str:
-        """
-        Generate a synthesized answer from query and context.
-
-        Args:
-            query: The original user query
-            context: List of relevant text excerpts from citations
-
-        Returns:
-            LLM-generated reasoning/answer
-        """
-        pass
-
-
-class MockVectorDBClient(VectorDBClient):
-    """Mock Qdrant client for testing without a running database."""
-
-    def __init__(self) -> None:
-        # Mock document corpus
-        self._mock_data = [
+    def search(self, query: str, collection: str, top_k: int) -> List[SearchResult]:
+        """Perform vector search against Qdrant."""
+        # 1. Encode query
+        vector = self.model.encode(query).tolist()
+        
+        # 2. Search using the most compatible method for v1.12+
+        # Logic: We use 'search' but wrap it in error handling for version mismatches
+        try:
+            points = self.client.search(
+                collection_name=collection,
+                query_vector=vector,
+                limit=top_k,
+                with_payload=True
+            )
+        except Exception as e:
+            # Fallback to a lower-level API if 'search' attribute is missing
+            print(f"Standard search failed, trying low-level API: {e}")
+            from qdrant_client.http import models
+            res = self.client.query_points(
+                collection_name=collection,
+                query=vector,
+                limit=top_k
+            )
+            points = res.points
+        
+        # 3. Format results for the API
+        return [
             SearchResult(
-                source="neural_networks_fundamentals.pdf",
-                page=42,
-                text="Backpropagation computes gradients by applying the chain rule recursively through the network layers.",
-                score=0.95,
-            ),
-            SearchResult(
-                source="deep_learning_architectures.pdf",
-                page=15,
-                text="Transformer models use self-attention mechanisms to capture long-range dependencies in sequences.",
-                score=0.89,
-            ),
-            SearchResult(
-                source="ml_optimization.pdf",
-                page=78,
-                text="Adam optimizer combines momentum and RMSprop, adapting learning rates for each parameter.",
-                score=0.82,
-            ),
-            SearchResult(
-                source="neural_networks_fundamentals.pdf",
-                page=56,
-                text="Dropout regularization randomly deactivates neurons during training to prevent overfitting.",
-                score=0.75,
-            ),
-            SearchResult(
-                source="practical_ml_guide.pdf",
-                page=23,
-                text="Cross-validation provides robust model evaluation by training on multiple data splits.",
-                score=0.68,
-            ),
+                text=p.payload.get("text", ""),
+                metadata={
+                    "source": p.payload.get("source"),
+                    "page": p.payload.get("page_number"),
+                    "type": p.payload.get("element_type")
+                }
+            ) for p in points
         ]
 
-    def search(
-        self, query: str, collection: str, top_k: int
-    ) -> list[SearchResult]:
-        """Return mock search results."""
-        # In a real implementation, this would:
-        # 1. Encode query with embedding model
-        # 2. Perform hybrid search (sparse BM25 + dense vector)
-        # 3. Rerank results
-        return self._mock_data[:top_k]
+class RealLLMClient(LLMClient):
+    """Actual Ollama client connecting to local service."""
 
+    def __init__(self, host: str, port: int, model: str):
+        self.url = f"http://{host}:{port}/api/generate"
+        self.model = model
 
-class MockLLMClient(LLMClient):
-    """Mock Ollama client for testing without a running LLM."""
-
-    def synthesize(self, query: str, context: list[str]) -> str:
-        """Return a mock synthesized response."""
-        # In a real implementation, this would:
-        # 1. Format prompt with query and context
-        # 2. Call Ollama API
-        # 3. Return generated text
-        context_summary = f"Based on {len(context)} sources"
-        return (
-            f"{context_summary}, the answer to '{query}' involves the concepts "
-            f"mentioned in the retrieved documents. This is a mock response - "
-            f"connect to Ollama for real LLM synthesis."
+    def synthesize(self, query: str, context: List[str]) -> str:
+        """Send context and query to Ollama for RAG response."""
+        context_str = "\n---\n".join(context)
+        prompt = (
+            f"Context information is below:\n{context_str}\n\n"
+            f"Using ONLY the context provided, answer this query: {query}\n"
+            f"If the answer is not in the context, say you do not know."
         )
 
+        try:
+            response = httpx.post(
+                self.url,
+                json={
+                    "model": self.model,
+                    "prompt": prompt,
+                    "stream": False
+                },
+                timeout=90.0
+            )
+            response.raise_for_status()
+            return response.json().get("response", "Error: Empty response.")
+        except Exception as e:
+            return f"LLM synthesis failed: {str(e)}"
+
+# --- MOCK CLIENTS ---
+
+class MockVectorDBClient(VectorDBClient):
+    def search(self, query: str, collection: str, top_k: int) -> List[SearchResult]:
+        return [SearchResult(text="Mock context", metadata={"source": "mock.pdf"})]
+
+class MockLLMClient(LLMClient):
+    def synthesize(self, query: str, context: List[str]) -> str:
+        return f"Mock response for query: {query}"
+
+# --- FACTORY FUNCTIONS ---
 
 def create_vector_client(mock: bool = False) -> VectorDBClient:
-    """Factory function to create appropriate vector DB client."""
     if mock:
         return MockVectorDBClient()
-    # TODO: Return real QdrantClient when implemented
-    raise NotImplementedError("Real Qdrant client not yet implemented")
-
+    from .config import settings
+    return RealVectorDBClient(host=settings.qdrant_host, port=settings.qdrant_port)
 
 def create_llm_client(mock: bool = False) -> LLMClient:
-    """Factory function to create appropriate LLM client."""
     if mock:
         return MockLLMClient()
-    # TODO: Return real OllamaClient when implemented
-    raise NotImplementedError("Real Ollama client not yet implemented")
+    from .config import settings
+    return RealLLMClient(
+        host=settings.ollama_host, 
+        port=settings.ollama_port, 
+        model=settings.ollama_model
+    )
