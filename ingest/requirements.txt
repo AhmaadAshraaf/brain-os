@@ -1,5 +1,9 @@
 # Ingest Service Dependencies
-unstructured[all-docs]>=0.10.0
+#
+# System dependencies (install via apt-get):
+#   apt-get install -y poppler-utils tesseract-ocr
+#
+unstructured[pdf]>=0.10.0
 qdrant-client>=1.7.0
 sentence-transformers>=2.2.0
 python-dotenv>=1.0.0

@@ -36,6 +36,14 @@ Uses overlay pattern with a shared base:
 - `docker-compose.prod.yml` - VM overlay: adds Ingest service + Prometheus
 - `docker-compose.local.yml` - Laptop overlay: read-only Qdrant mount, no GPU reservation
 
+### Client Abstraction Pattern
+
+The API uses abstract base classes for dependency injection (`api/src/clients.py`):
+- `VectorDBClient` (ABC) → `MockVectorDBClient` / (future: real Qdrant)
+- `LLMClient` (ABC) → `MockLLMClient` / (future: real Ollama)
+
+Factory functions `create_vector_client(mock=True)` and `create_llm_client(mock=True)` switch implementations. The `use_mock_clients` setting in config controls this globally.
+
 ### API Response Structure
 
 The `/query` endpoint returns Linear (Sparse) + Non-Linear (Dense) results:
@@ -44,6 +52,19 @@ The `/query` endpoint returns Linear (Sparse) + Non-Linear (Dense) results:
   "citations": [...],   // Specific document citations (Linear/Sparse)
   "reasoning": "..."    // LLM-synthesized answer (Non-Linear/Dense)
 }
+```
+
+### Ingest Pipeline Architecture (VM Only)
+
+The ingest service (`ingest/src/main.py`) processes documents through:
+1. **PDF Parsing** - Uses `unstructured.partition.pdf` with `strategy="hi_res"` and `infer_table_structure=True`
+2. **Table Flattening** - Tables are converted to searchable text: `"Table data: {content}"`
+3. **Metadata Enrichment** - Each chunk stores `source`, `page_number`, `element_type`
+4. **Vectorization** - Embeds text using sentence-transformers, upserts to Qdrant with hybrid search (sparse+dense)
+
+**System Dependencies (required on VM):**
+```bash
+apt-get install -y poppler-utils tesseract-ocr
 ```
 
 ### Snapshot Workflow
@@ -62,6 +83,23 @@ make test-api      # Run pytest on API service
 make ingest-dev    # Run ingest service locally (development)
 make clean         # Stop all containers and remove volumes
 ```
+
+### Running API Locally (without Docker)
+
+```bash
+cd api && python -m src.app      # Starts uvicorn on port 8000 with mock clients
+```
+
+### Testing
+
+```bash
+make test-api                           # Run all API tests
+cd api && pytest tests/test_query.py    # Run specific test file
+cd api && pytest -k "test_health"       # Run tests matching pattern
+cd api && pytest -v --tb=long           # Verbose output with full tracebacks
+```
+
+Tests use `use_mock_clients=True` by default, so no external services needed.
 
 ### Scripts
 
@@ -86,3 +124,4 @@ See `.env.example` for full list. Critical ones:
 - `OLLAMA_HOST`, `OLLAMA_MODEL`
 - `WASABI_ACCESS_KEY`, `WASABI_SECRET_KEY`, `WASABI_BUCKET`
 - `EMBEDDING_MODEL` (sentence-transformers model name)
+- `INGEST_WATCH_DIR`, `INGEST_BATCH_SIZE` (VM ingest service)
