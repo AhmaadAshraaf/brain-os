@@ -97,9 +97,28 @@ async def query(request: QueryRequest) -> QueryResponse:
         for result in search_results
     ]
 
-    # Step 2: Non-Linear Synthesis - Generate reasoning from context
-    context = [result.text for result in search_results]
-    reasoning = llm_client.synthesize(query=request.query, context=context)
+    # --- START OF MANUAL EDIT ---
+    # Step 2: Non-Linear Synthesis - Deep Research Prompting
+    # We format the context to include Source/Page info so the LLM can cite correctly.
+    formatted_context = [
+        f"SOURCE: {c.source} | PAGE: {c.page}\nCONTENT: {c.text}" 
+        for c in citations
+    ]
+    
+    # We define a specialized system prompt for "Deep Research"
+    system_instruction = (
+        "You are a Deep Research Assistant. Answer using ONLY the provided context.\n"
+        "1. Synthesize a non-linear answer based on retrieved evidence.\n"
+        "2. Cite every claim as [Source_Name, Page_X].\n"
+        "3. If context includes flattened tables, extract specific numerical data points."
+    )
+
+    # Note: We combine instructions with context for the LLM call
+    reasoning = llm_client.synthesize(
+        query=f"{system_instruction}\n\nUSER QUESTION: {request.query}", 
+        context=formatted_context
+    )
+    # --- END OF MANUAL EDIT ---
 
     logger.info(
         "query_complete",
