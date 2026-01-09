@@ -15,9 +15,9 @@ class Citation(BaseModel):
     """A single citation from the document corpus."""
 
     source: str = Field(..., description="Document filename or path")
-    page: int = Field(..., ge=1, description="Page number in the source document")
+    page: int = Field(default=1, ge=1, description="Page number in the source document")
     text: str = Field(..., description="Relevant text excerpt")
-    score: float = Field(..., ge=0, le=1, description="Relevance score")
+    score: float = Field(default=0.0, ge=0, description="Relevance score")
 
 
 class QueryResponse(BaseModel):

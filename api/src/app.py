@@ -89,10 +89,10 @@ async def query(request: QueryRequest) -> QueryResponse:
     # Convert to Citation models
     citations = [
         Citation(
-            source=result.source,
-            page=result.page,
+            source=result.metadata.get("source", "unknown"),
+            page=result.metadata.get("page", 1),
             text=result.text,
-            score=result.score,
+            score=result.metadata.get("score", 0.0),
         )
         for result in search_results
     ]
