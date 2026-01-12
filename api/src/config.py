@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Ollama
     ollama_host: str = "localhost"
     ollama_port: int = 11434
-    ollama_model: str = "llama3.2"
+    ollama_model: str = "llama3.1:8b"
 
     # Paths (Added to match your .env)
     source_docs_path: str = "/home/ops/brain-os/data/raw"

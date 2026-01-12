@@ -8,3 +8,5 @@ qdrant-client>=1.7.0
 sentence-transformers>=2.2.0
 python-dotenv>=1.0.0
 structlog>=23.0.0
+pytest>=7.4.0
+pytest-mock>=3.12.0

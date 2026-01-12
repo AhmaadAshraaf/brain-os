@@ -43,7 +43,7 @@ docker pull prom/prometheus:latest
 
 # Step 5: Pull default Ollama model
 echo "[INFO] Pulling default Ollama model..."
-docker run --rm ollama/ollama pull llama3.2 || echo "[WARN] Could not pull model, will pull on first run"
+docker run --rm ollama/ollama pull llama3.1:8b || echo "[WARN] Could not pull model, will pull on first run"
 
 echo ""
 echo "[SUCCESS] Setup complete!"
