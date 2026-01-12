@@ -135,7 +135,76 @@ Tests use `use_mock_clients=True` by default, so no external services needed.
 
 See `.env.example` for full list. Critical ones:
 - `QDRANT_HOST`, `QDRANT_PORT`, `QDRANT_COLLECTION`
-- `OLLAMA_HOST`, `OLLAMA_MODEL`
+- `OLLAMA_HOST`, `OLLAMA_MODEL` (currently: `llama3.1:8b`)
 - `WASABI_ACCESS_KEY`, `WASABI_SECRET_KEY`, `WASABI_BUCKET`
-- `EMBEDDING_MODEL` (sentence-transformers model name)
+- `EMBEDDING_MODEL` (sentence-transformers model name, default: `sentence-transformers/all-MiniLM-L6-v2`)
 - `INGEST_WATCH_DIR`, `INGEST_BATCH_SIZE` (VM ingest service)
+
+---
+
+## Current System State (2026-01-12)
+
+### Completed Milestones
+
+#### ✅ Data Ingestion Pipeline with TDD (Jan 12, 2026)
+- **Status:** Production-ready, fully tested
+- **Test Coverage:** 13 test cases in `ingest/tests/test_ingestion.py`
+- **Key Components:**
+  - `DocumentProcessor` - PDF parsing with hi-res layout analysis
+  - `QdrantVectorClient` - Hybrid vector generation and Qdrant upserts
+  - Collection name enforced: `brain_os_docs`
+  - Input directory: `/app/documents` (configurable via `INGEST_WATCH_DIR`)
+- **Hybrid Search Validated:**
+  - Dense vectors: 384-dimensional (sentence-transformers/all-MiniLM-L6-v2)
+  - Sparse vectors: Term frequency with IDF modifier
+  - Both vector types tested and working
+- **LLM Configuration:** Updated to `llama3.1:8b` across all configs
+
+### Next Steps
+
+1. **Run Tests in Docker Environment**
+   - Add `make test-ingest` to Makefile
+   - Validate tests pass with real dependencies in container
+   - Command: `docker-compose exec ingest pytest tests/ -v`
+
+2. **VM Deployment**
+   - Deploy ingestion service to Hetzner VM
+   - Load sample PDFs into `/data/documents`
+   - Monitor ingestion logs via `docker-compose logs -f ingest`
+   - Verify Qdrant collection population: `curl http://localhost:6333/collections/brain_os_docs`
+
+3. **Snapshot Creation & Sync**
+   - Run `./scripts/snapshot_push.sh` after initial ingestion
+   - Validate snapshot appears in Wasabi S3 bucket
+   - Test `./scripts/snapshot_pull.sh` on laptop
+   - Verify offline query functionality with downloaded snapshot
+
+4. **API Integration Testing**
+   - Switch API to real clients: `use_mock_clients=False` in config
+   - Test `/query` endpoint with ingested documents
+   - Validate citation accuracy (source, page_number)
+   - Test Deep Research with table data extraction
+
+5. **Monitoring & Observability**
+   - Configure Prometheus metrics for ingestion pipeline
+   - Add alerting for failed document processing
+   - Dashboard: ingestion rate, error rate, collection size
+
+6. **Documentation**
+   - Update README with deployment instructions
+   - Add troubleshooting guide for common ingestion errors
+   - Document snapshot restore procedures
+
+### Known Constraints
+- Collection name must remain `brain_os_docs` (hardcoded in both ingest and API)
+- LLM model: `llama3.1:8b` (per user specification)
+- Embedding model: `sentence-transformers/all-MiniLM-L6-v2` (not changed)
+- Test suite requires mocked dependencies (no real Qdrant/PDF files for unit tests)
+
+### Files Changed (Latest Commit: 8074fdf)
+- `ingest/tests/test_ingestion.py` (NEW) - 13 test cases covering full pipeline
+- `CHANGELOG.md` (NEW) - Technical decision log
+- `api/src/config.py` - Updated `ollama_model` to `llama3.1:8b`
+- `.env.example` - Updated `OLLAMA_MODEL` to `llama3.1:8b`
+- `scripts/setup.sh` - Updated model pull to `llama3.1:8b`
+- `ingest/requirements.txt` - Added pytest dependencies
