@@ -1,4 +1,4 @@
-.PHONY: up-online up-offline up-local ingest-dev clean sync-down test-api help
+.PHONY: up-online up-offline up-local ingest-dev clean sync-down test-api test-ingest help
 
 # Default target
 help:
@@ -10,6 +10,7 @@ help:
 	@echo "  ingest-dev   Run ingest service in development mode"
 	@echo "  sync-down    Pull latest Qdrant snapshot from Wasabi S3"
 	@echo "  test-api     Run pytest on API service"
+	@echo "  test-ingest  Run pytest on ingest service (Docker)"
 	@echo "  clean        Stop all containers and remove volumes"
 
 # Production stack (VM) - includes ingest service
@@ -34,6 +35,11 @@ sync-down:
 # Run API tests
 test-api:
 	cd api && pytest -v
+
+# Run ingest tests in Docker
+test-ingest:
+	docker compose -f infra/docker-compose.base.yml -f infra/docker-compose.prod.yml build ingest
+	docker compose -f infra/docker-compose.base.yml -f infra/docker-compose.prod.yml run --rm ingest pytest tests/ -v
 
 # Cleanup
 clean:
