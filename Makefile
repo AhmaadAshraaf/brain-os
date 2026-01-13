@@ -36,10 +36,9 @@ sync-down:
 test-api:
 	cd api && pytest -v
 
-# Run ingest tests in Docker
+# Run ingest tests in Docker (requires services to be running via make up-online)
 test-ingest:
-	docker compose -f infra/docker-compose.base.yml -f infra/docker-compose.prod.yml build ingest
-	docker compose -f infra/docker-compose.base.yml -f infra/docker-compose.prod.yml run --rm ingest pytest tests/ -v
+	docker-compose exec ingest pytest tests/ -v
 
 # Cleanup
 clean:

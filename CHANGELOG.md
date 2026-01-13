@@ -2,6 +2,66 @@
 
 All notable technical decisions and changes to Brain-OS v3.0.
 
+## [2026-01-13] - Tuesday Milestone: Repository Structure & PRD
+
+### Repository Management
+
+#### CLAUDE.md Removed from Version Control
+- **Why**: CLAUDE.md contains project-specific instructions for AI assistance and should remain local-only
+- **What**:
+  - Added `CLAUDE.md` to `.gitignore` under "# Documentation (local only)"
+  - Ran `git rm --cached CLAUDE.md` to remove from index while preserving local file
+  - File remains functional for Claude Code but won't be committed
+- **Rationale**: Keeps AI instructions accessible without polluting version control history
+
+### Documentation
+
+#### Product Requirements Document (PRD)
+- **Location**: `docs/PRD.md`
+- **Why**: Formal specification of Brain-OS v3.0 architecture, capabilities, and use cases for stakeholders
+- **Contents**:
+  - **Deep Research Capabilities**: Hybrid search (sparse + dense vectors), hi-res PDF parsing, table flattening
+  - **Write Once, Read Anywhere (WORA)**: Architecture diagram showing VM ingestion → S3 snapshot bridge → offline laptop
+  - **Technical Stack**: Complete list of dependencies and system requirements
+  - **Wasabi S3 Snapshot Bridge**: Detailed workflow for snapshot push/pull operations
+  - **API Design**: `/query` endpoint with Linear (citations) + Non-Linear (reasoning) response structure
+  - **Use Cases**: Offline research, compliance auditing, multi-modal document analysis, personal knowledge management
+  - **Performance Characteristics**: Ingestion (2-6 sec/page), Query (3-12 sec end-to-end)
+  - **Appendices**: Docker Compose structure, environment variables, testing strategy, deployment checklist
+- **Technical Decision**: PRD documents "why" and "what" for each component, not just "how"
+
+### Build System
+
+#### Make Target: `test-ingest` Updated
+- **Previous Implementation**: `docker compose run --rm ingest pytest tests/ -v` (created fresh container)
+- **New Implementation**: `docker-compose exec ingest pytest tests/ -v`
+- **Why**: Exec pattern tests against running services, closer to production behavior
+- **Requirement**: Services must be started first via `make up-online`
+- **Trade-off**: Requires pre-existing container state (not isolated), but validates integration with live Qdrant/Ollama
+
+### VM Deployment Readiness
+
+#### Volume Mapping Verification (ingest/src/main.py:261)
+- **Code**: `Path(watch_dir or os.getenv("INGEST_WATCH_DIR", "/app/documents"))`
+- **Docker Mount**: `../data/documents:/app/documents:ro` (docker-compose.prod.yml:16)
+- **Status**: ✅ Verified correct - code expects `/app/documents` which matches volume mount
+
+#### Docker Compose Overlay Pattern Validated
+- **Base**: `docker-compose.base.yml` (Qdrant, Ollama, API)
+- **Prod Overlay**: `docker-compose.prod.yml` (adds Ingest service, Prometheus)
+- **Local Overlay**: `docker-compose.local.yml` (read-only Qdrant, no ingestion)
+- **Validation**: Confirmed Ingest service only exists in prod overlay (VM-only ingestion)
+
+### Next Steps (Wednesday Milestone)
+1. **VM Deployment**: Deploy production stack to Hetzner VM
+2. **Sample Data Load**: Upload test PDFs to `/data/documents`
+3. **Ingestion Validation**: Monitor `docker-compose logs -f ingest` for successful processing
+4. **Snapshot Creation**: Run `./scripts/snapshot_push.sh` to create first S3 snapshot
+5. **Offline Sync Test**: Pull snapshot to laptop via `make sync-down`, verify query functionality
+6. **Monitoring Setup**: Configure Prometheus metrics for ingestion pipeline
+
+---
+
 ## [2026-01-12] - Data Ingestion Milestone (TDD Implementation)
 
 ### Added
