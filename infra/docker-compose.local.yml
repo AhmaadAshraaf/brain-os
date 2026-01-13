@@ -6,8 +6,3 @@ services:
     # Override to use snapshot data directory
     volumes:
       - ../data/qdrant_snapshot:/qdrant/storage:ro
-
-  ollama:
-    # Remove GPU reservation for laptops without NVIDIA GPU
-    deploy:
-      resources: {}

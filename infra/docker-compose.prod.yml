@@ -16,8 +16,7 @@ services:
       - ../data/documents:/app/documents:ro
       - ingest_cache:/app/cache
     depends_on:
-      qdrant:
-        condition: service_healthy
+      - qdrant
 
   # Prometheus for monitoring (VM only)
   prometheus:

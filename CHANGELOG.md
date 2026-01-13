@@ -2,6 +2,149 @@
 
 All notable technical decisions and changes to Brain-OS v3.0.
 
+## [2026-01-13] - Docker Deployment & Production Readiness
+
+### Production Deployment Completed
+
+#### VM Stack Operational (Hetzner 100.92.141.105)
+- **Status**: Full production stack running via Docker Compose
+- **Services Deployed**:
+  - ✅ Qdrant (ports 6333-6334): Vector database with hybrid search
+  - ✅ Ollama (port 11435): LLM inference running on CPU
+  - ✅ Ingest Service: Watching `/app/documents` for PDF processing
+  - ✅ API (port 8000): FastAPI service now containerized
+  - ✅ Prometheus (port 9090): Metrics collection and monitoring
+- **Migration**: Replaced systemd `rag-api.service` with containerized API for consistency
+
+### Docker Infrastructure
+
+#### Dockerfiles Created
+- **`api/Dockerfile`** (NEW):
+  - Base: `python:3.11-slim`
+  - Installs FastAPI, Qdrant client, Ollama, sentence-transformers
+  - Exposes port 8000, runs uvicorn
+  - PYTHONPATH set to `/app` for proper imports
+- **`ingest/Dockerfile`** (UPDATED):
+  - Added system dependencies: `libgl1` (OpenCV) and `libglib2.0-0` (GTK)
+  - Required for hi-res PDF parsing with layout analysis
+  - Prevents `ImportError: libGL.so.1: cannot open shared object file`
+
+#### GPU Dependency Resolution
+- **Problem**: Docker Compose configured for Nvidia GPU, but VM has no GPU
+- **Solution**: Removed all GPU requirements from docker-compose files
+- **Changes**:
+  - `docker-compose.base.yml`: Removed `deploy.resources.reservations.devices` section for Ollama
+  - `docker-compose.prod.yml`: Removed Ollama GPU override (no longer needed)
+  - `docker-compose.local.yml`: Removed Ollama GPU override (no longer needed)
+- **Impact**: Ollama runs on CPU (slower inference, ~3-5x latency vs GPU)
+- **Rationale**: Prioritizes deployment flexibility over performance; GPU can be re-enabled later if needed
+
+#### Port Conflict Resolution
+- **Problem**: Host Ollama systemd service using port 11434
+- **Solution**: Mapped Docker Ollama to external port 11435
+- **Configuration**: `ports: "11435:11434"` in docker-compose.base.yml
+- **Internal**: Services still connect via `ollama:11434` (Docker network)
+- **Trade-off**: Non-standard external port, but avoids systemd service conflict
+
+#### Healthcheck Simplification
+- **Previous**: `curl -f http://localhost:6333/readyz` (curl not in Qdrant image)
+- **Attempted**: `wget --spider -q` (wget also not available)
+- **Final Solution**: Removed healthcheck entirely, using simple `depends_on` without `condition: service_healthy`
+- **Impact**: Containers may start before dependencies are fully ready (acceptable for dev/staging)
+- **Production Note**: Consider adding curl/wget to Qdrant image or using TCP socket check
+
+### Configuration Management
+
+#### Environment File (.env) Standardized
+- **Location**: `/home/ops/brain-os/.env` on VM
+- **Previous State**: Only had `SOURCE_DOCS_PATH` (incomplete)
+- **Updated**: Full configuration from `.env.example` template:
+  - Qdrant: host, port, collection name
+  - Ollama: host, port, model (`llama3.1:8b`)
+  - Wasabi S3: credentials, bucket, region, endpoint
+  - Embedding: model name (`sentence-transformers/all-MiniLM-L6-v2`)
+  - API: host, port, log level
+  - Ingest: batch size, watch directory (`/app/documents`)
+- **Impact**: Services now load configuration consistently
+
+#### Data Directory Structure
+- **Created**: `/home/ops/brain-os/data/documents/` on VM
+- **Mount Point**: Maps to `/app/documents` inside ingest container
+- **Permission**: Read-only mount (`:ro`) to prevent accidental modification
+- **Status**: Empty (ready for PDF uploads)
+
+### Testing Infrastructure
+
+#### Test Import Path Fixed
+- **Problem**: Tests imported `from ingest.src.main import ...` (failed in Docker)
+- **Root Cause**: PYTHONPATH is `/app`, so `ingest` prefix is incorrect
+- **Solution**: Changed all imports to `from src.main import ...`
+- **Files Modified**: `ingest/tests/test_ingestion.py`
+- **Impact**: Tests now executable via `docker exec infra-ingest-1 python -m pytest tests/ -v`
+
+#### Test Dependencies Added
+- **Updated**: `ingest/requirements.txt`
+- **Added**:
+  - `pytest>=7.4.0` - Test framework
+  - `pytest-mock>=3.12.0` - Mocking utilities for unit tests
+- **Previous State**: Missing from requirements (tests couldn't run in Docker)
+- **Impact**: Full test suite now executable inside container
+
+#### API Dependencies Updated
+- **Updated**: `api/requirements.txt`
+- **Added**: `sentence-transformers>=2.2.0`
+- **Why**: API clients.py imports SentenceTransformer for embedding generation
+- **Previous State**: Missing dependency caused ModuleNotFoundError
+- **Impact**: API container now builds successfully
+
+### Technical Decisions & Trade-offs
+
+#### Decision: Docker Compose Over Systemd Services
+- **Rationale**:
+  - Unified orchestration across VM and laptop
+  - Reproducible environment (same Dockerfiles everywhere)
+  - Easier debugging (logs via `docker logs`, not scattered journalctl)
+  - Simplified deployment (no manual service files)
+- **Trade-off**: Slightly higher memory overhead vs bare metal systemd
+
+#### Decision: CPU-Only Deployment
+- **Rationale**:
+  - VM lacks GPU hardware
+  - Ollama CPU inference is sufficient for development/testing
+  - GPU can be re-enabled later if performance becomes critical
+- **Trade-off**: Slower LLM inference (~3-5x vs GPU)
+
+#### Decision: Remove Healthchecks
+- **Rationale**:
+  - Qdrant image lacks curl/wget for HTTP checks
+  - Adding dependencies increases image size
+  - Simple `depends_on` is sufficient for non-critical deployments
+- **Trade-off**: Possible startup race conditions (services start before dependencies ready)
+
+### Files Changed
+
+- `api/Dockerfile` (NEW) - Production Dockerfile for FastAPI service
+- `ingest/Dockerfile` - Added `libgl1` and `libglib2.0-0` for OpenCV
+- `api/requirements.txt` - Added `sentence-transformers>=2.2.0`
+- `ingest/requirements.txt` - Added `pytest>=7.4.0` and `pytest-mock>=3.12.0`
+- `ingest/tests/test_ingestion.py` - Fixed imports from `ingest.src.main` to `src.main`
+- `infra/docker-compose.base.yml` - Removed GPU requirements, Ollama port 11435, removed healthcheck
+- `infra/docker-compose.prod.yml` - Removed GPU override, simplified dependencies
+- `infra/docker-compose.local.yml` - Removed Ollama GPU override
+- `.env` on VM - Complete configuration with all required environment variables
+- `CLAUDE.md` - Updated with Docker deployment milestone and current system state
+- `CHANGELOG.md` - This entry
+
+### Next Actions
+
+1. **Stop systemd service**: `sudo systemctl stop rag-api.service && sudo systemctl disable rag-api.service`
+2. **Start API container**: `docker compose -f infra/docker-compose.base.yml -f infra/docker-compose.prod.yml up -d api`
+3. **Upload test PDFs**: Copy 5-10 sample documents to `data/documents/` on VM
+4. **Verify ingestion**: Monitor logs with `docker logs -f infra-ingest-1`
+5. **Test query endpoint**: `curl -X POST http://100.92.141.105:8000/query -d '{"question": "test"}'`
+
+---
+
 ## [2026-01-13] - Tuesday Milestone: Repository Structure & PRD
 
 ### Repository Management

@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 from qdrant_client.models import Distance, SparseVector, VectorParams
 
-from ingest.src.main import DocumentChunk, DocumentProcessor, QdrantVectorClient
+from src.main import DocumentChunk, DocumentProcessor, QdrantVectorClient
 
 
 class TestDocumentChunk:
@@ -37,8 +37,8 @@ class TestDocumentChunk:
 class TestQdrantVectorClient:
     """Test QdrantVectorClient with mocked Qdrant connection."""
 
-    @patch("ingest.src.main.QdrantClient")
-    @patch("ingest.src.main.SentenceTransformer")
+    @patch("src.main.QdrantClient")
+    @patch("src.main.SentenceTransformer")
     def test_client_initialization(self, mock_st, mock_qc):
         """Test that client initializes with correct parameters."""
         mock_model = Mock()
@@ -57,8 +57,8 @@ class TestQdrantVectorClient:
         assert client.vector_size == 384
         mock_qc.assert_called_once_with(host="localhost", port=6333)
 
-    @patch("ingest.src.main.QdrantClient")
-    @patch("ingest.src.main.SentenceTransformer")
+    @patch("src.main.QdrantClient")
+    @patch("src.main.SentenceTransformer")
     def test_collection_name_is_brain_os_docs(self, mock_st, mock_qc):
         """Verify that the collection name is exactly 'brain_os_docs'."""
         mock_model = Mock()
@@ -69,8 +69,8 @@ class TestQdrantVectorClient:
 
         assert client.COLLECTION_NAME == "brain_os_docs"
 
-    @patch("ingest.src.main.QdrantClient")
-    @patch("ingest.src.main.SentenceTransformer")
+    @patch("src.main.QdrantClient")
+    @patch("src.main.SentenceTransformer")
     def test_ensure_collection_exists_creates_with_hybrid_vectors(self, mock_st, mock_qc):
         """Test collection creation with both dense and sparse vector configs."""
         mock_model = Mock()
@@ -95,8 +95,8 @@ class TestQdrantVectorClient:
         assert dense_config.size == 384
         assert dense_config.distance == Distance.COSINE
 
-    @patch("ingest.src.main.QdrantClient")
-    @patch("ingest.src.main.SentenceTransformer")
+    @patch("src.main.QdrantClient")
+    @patch("src.main.SentenceTransformer")
     def test_compute_sparse_vector(self, mock_st, mock_qc):
         """Test sparse vector generation from text."""
         mock_model = Mock()
@@ -112,8 +112,8 @@ class TestQdrantVectorClient:
         assert len(sparse_vector.values) > 0
         assert len(sparse_vector.indices) == len(sparse_vector.values)
 
-    @patch("ingest.src.main.QdrantClient")
-    @patch("ingest.src.main.SentenceTransformer")
+    @patch("src.main.QdrantClient")
+    @patch("src.main.SentenceTransformer")
     def test_upsert_chunks_generates_dense_and_sparse_vectors(self, mock_st, mock_qc):
         """Test that upsert generates both dense and sparse vectors for hybrid search."""
         import numpy as np
@@ -164,8 +164,8 @@ class TestQdrantVectorClient:
             assert len(point.vector["sparse"].indices) > 0
             assert len(point.vector["sparse"].values) > 0
 
-    @patch("ingest.src.main.QdrantClient")
-    @patch("ingest.src.main.SentenceTransformer")
+    @patch("src.main.QdrantClient")
+    @patch("src.main.SentenceTransformer")
     def test_upsert_chunks_includes_metadata(self, mock_st, mock_qc):
         """Test that chunks include all required metadata fields."""
         import numpy as np
@@ -202,7 +202,7 @@ class TestQdrantVectorClient:
 class TestDocumentProcessor:
     """Test DocumentProcessor with mocked PDF parsing."""
 
-    @patch("ingest.src.main.QdrantVectorClient")
+    @patch("src.main.QdrantVectorClient")
     def test_processor_initialization(self, mock_vector_client):
         """Test processor initializes with correct watch directory."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -211,8 +211,8 @@ class TestDocumentProcessor:
             assert processor.watch_dir == Path(tmpdir)
             assert processor.batch_size == 10
 
-    @patch("ingest.src.main.partition_pdf")
-    @patch("ingest.src.main.QdrantVectorClient")
+    @patch("src.main.partition_pdf")
+    @patch("src.main.QdrantVectorClient")
     def test_parse_pdf_extracts_chunks(self, mock_vector_client, mock_partition):
         """Test PDF parsing extracts chunks with proper metadata."""
         mock_element1 = Mock()
@@ -243,8 +243,8 @@ class TestDocumentProcessor:
         assert chunks[1].page_number == 2
         assert chunks[1].element_type == "Table"
 
-    @patch("ingest.src.main.partition_pdf")
-    @patch("ingest.src.main.QdrantVectorClient")
+    @patch("src.main.partition_pdf")
+    @patch("src.main.QdrantVectorClient")
     def test_parse_pdf_handles_tables_specially(self, mock_vector_client, mock_partition):
         """Test that table elements are prefixed with 'Table data:'."""
         mock_table = Mock()
@@ -262,8 +262,8 @@ class TestDocumentProcessor:
         assert chunks[0].text.startswith("Table data:")
         assert "<table>" in chunks[0].text
 
-    @patch("ingest.src.main.partition_pdf")
-    @patch("ingest.src.main.QdrantVectorClient")
+    @patch("src.main.partition_pdf")
+    @patch("src.main.QdrantVectorClient")
     def test_process_and_upload_calls_vector_client(self, mock_vector_client_class, mock_partition):
         """Test that processing uploads chunks to vector client."""
         mock_element = Mock()
@@ -289,9 +289,9 @@ class TestDocumentProcessor:
 class TestIntegrationScenario:
     """End-to-end test scenarios with mocked dependencies."""
 
-    @patch("ingest.src.main.partition_pdf")
-    @patch("ingest.src.main.QdrantClient")
-    @patch("ingest.src.main.SentenceTransformer")
+    @patch("src.main.partition_pdf")
+    @patch("src.main.QdrantClient")
+    @patch("src.main.SentenceTransformer")
     def test_full_pipeline_pdf_to_vectors(self, mock_st, mock_qc, mock_partition):
         """
         Test complete pipeline: PDF -> Chunks -> Dense+Sparse Vectors -> Qdrant.
