@@ -2,6 +2,27 @@
 
 All notable technical decisions and changes to Brain-OS v3.0.
 
+## [2026-01-13] - Port Configuration Fix
+
+### API Port Moved to 8001
+- **Problem**: Port 8000 conflicts with existing host services on Hetzner VM
+- **Solution**: Changed external port mapping from `8000:8000` to `8001:8000` in `docker-compose.base.yml`
+- **Impact**:
+  - API accessible on port 8001 externally (e.g., `http://100.92.141.105:8001`)
+  - Internal container still runs on port 8000 (no application code changes needed)
+  - Services within Docker network continue to use `api:8000` (no inter-service changes)
+- **Files Modified**:
+  - `infra/docker-compose.base.yml` - Port mapping updated
+  - `CLAUDE.md` - Documentation updated with new port references
+  - `CHANGELOG.md` - This entry
+- **Deployment Note**: After pulling this change on VM, restart services with:
+  ```bash
+  docker-compose -f infra/docker-compose.base.yml -f infra/docker-compose.prod.yml down
+  docker-compose -f infra/docker-compose.base.yml -f infra/docker-compose.prod.yml up -d
+  ```
+
+---
+
 ## [2026-01-13] - Docker Deployment & Production Readiness
 
 ### Production Deployment Completed
