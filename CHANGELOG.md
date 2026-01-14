@@ -2,6 +2,56 @@
 
 All notable technical decisions and changes to Brain-OS v3.0.
 
+## [2026-01-14] - Initial Data Ingestion & First Snapshot
+
+### Data Ingestion Milestone Completed
+- **Files Processed**: 1 (sample_research.pdf, 66 KB)
+- **Chunks Generated**: 2 (1 Title element, 1 Table element)
+- **Qdrant Points**: 6 total (due to multiple processing runs during setup)
+- **Collection Status**: green, hybrid vectors confirmed
+- **Processing Time**: ~9 seconds per run
+- **Element Types Extracted**: Title, Table
+
+### Snapshot Created and Distributed
+- **Snapshot ID**: `brain_os_20260114_092325`
+- **S3 Location**: `s3://brain-os-prod/snapshots/brain_os_20260114_092325.snapshot`
+- **Snapshot Size**: 620.5 KiB
+- **LATEST Pointer**: Updated (enables laptop auto-sync to most recent snapshot)
+- **Upload Time**: ~2 seconds
+
+### Infrastructure Configuration Fixed
+- **Volume Mount Path Issue**: Discovered ingest container mounts from `/home/ops/brain-os/data/documents`, not `/root/brain-os/data/documents`
+- **AWS CLI Installation**: Installed AWS CLI v2 (v2.32.34) on VM using official installer (apt package unavailable)
+- **Wasabi S3 Configuration**:
+  - Bucket: `brain-os-prod` (corrected from default `brain-os-snapshots`)
+  - Region: `eu-central-2` (corrected from default `us-east-1`)
+  - Endpoint: `https://s3.eu-central-2.wasabisys.com` (region-specific)
+  - Credentials configured in both `.env` and `~/.aws/credentials`
+
+### Files Modified
+- `/home/ops/brain-os/.env` (VM only):
+  - Updated `WASABI_BUCKET=brain-os-prod`
+  - Updated `WASABI_REGION=eu-central-2`
+  - Updated `WASABI_ENDPOINT=https://s3.eu-central-2.wasabisys.com`
+  - Added `WASABI_ACCESS_KEY` and `WASABI_SECRET_KEY`
+- `CLAUDE.md` - Added "Initial Data Ingestion & First Snapshot" milestone
+- `CHANGELOG.md` - This entry
+
+### Technical Details
+- **Ingestion Process**: Service runs once on container start, processes all PDFs in watch directory, then exits
+- **Restart Required**: To process new PDFs, restart container: `docker restart infra-ingest-1`
+- **Hybrid Search Vectors**: Both dense (384-dim, Cosine distance) and sparse (IDF-modified) vectors confirmed in Qdrant
+- **Metadata Preserved**: Each point includes `source`, `page_number`, `element_type` for citation tracking
+
+### Verification Completed
+- ✅ Qdrant collection accessible and healthy (`status: green`)
+- ✅ Sample point query confirms metadata structure
+- ✅ Snapshot successfully uploaded to Wasabi S3
+- ✅ LATEST pointer created for offline laptop sync
+- ✅ AWS CLI configured and functional with Wasabi
+
+---
+
 ## [2026-01-13] - Port Configuration Fix
 
 ### API Port Moved to 8001
