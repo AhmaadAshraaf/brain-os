@@ -2,6 +2,48 @@
 
 All notable technical decisions and changes to Brain-OS v3.0.
 
+## [2026-01-14] - Bulk Ingestion & Monitoring Tools
+
+### New Scripts Added
+
+#### `scripts/bulk_ingest.sh` - Batch PDF Processing (VM Only)
+- **Purpose**: Process large volumes of PDFs in controlled batches
+- **Features**:
+  - Moves PDFs from staging directory (`data/raw`) to watch directory in batches of 10 (configurable)
+  - Restarts ingest container after each batch
+  - Waits for processing completion before moving next batch
+  - Monitors logs for `ingest_service_completed` event
+  - Timeout protection (max 300s per batch)
+  - Summary report with success/failure counts
+- **Usage**: `./scripts/bulk_ingest.sh [source_dir] [batch_size]`
+- **Default**: Processes from `/home/ops/brain-os/data/raw` in groups of 10
+
+#### `scripts/monitor_ollama_ram.sh` - Ollama Memory Monitoring (VM Only)
+- **Purpose**: Alert when Ollama container RAM usage spikes
+- **Features**:
+  - Monitors Ollama container memory via `docker stats`
+  - Configurable threshold (default: 8GB)
+  - Single-check mode (for cron) or continuous monitoring
+  - Logs alerts to `/var/log/ollama_ram_alerts.log`
+  - Placeholder integrations for Slack, Discord, Email, Telegram
+  - Human-readable output with percentage of threshold
+- **Usage**: `./scripts/monitor_ollama_ram.sh [threshold_gb] [check_interval]`
+- **Example**: `./scripts/monitor_ollama_ram.sh 8 30` (check every 30s, alert if >8GB)
+- **Cron Setup**: `*/5 * * * * /home/ops/brain-os/scripts/monitor_ollama_ram.sh 8 >> /var/log/ollama_monitor.log 2>&1`
+
+### Workflow Improvements
+- **Bulk Processing**: Can now ingest hundreds of PDFs without manual batch management
+- **Proactive Monitoring**: Detect Ollama memory issues before they cause OOM errors
+- **Automation Ready**: Both scripts designed for cron/systemd integration
+
+### Files Modified
+- `scripts/bulk_ingest.sh` (NEW) - 180 lines, comprehensive batch processing logic
+- `scripts/monitor_ollama_ram.sh` (NEW) - 150 lines, memory monitoring with alerting
+- `CLAUDE.md` - Added bulk ingestion workflow and script documentation
+- `CHANGELOG.md` - This entry
+
+---
+
 ## [2026-01-14] - Initial Data Ingestion & First Snapshot
 
 ### Data Ingestion Milestone Completed
