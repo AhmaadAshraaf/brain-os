@@ -31,6 +31,29 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
 
+  # Open WebUI for Brain-OS (VM only)
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:latest
+    container_name: openwebui
+    restart: unless-stopped
+    environment:
+      - OPENWEBUI_NAME=Brain-OS
+      - OPEN_WEBUI_API_BASE_URL=http://46.62.240.237:8001/v1
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - ENV=prod
+      - PORT=8080
+      - DO_NOT_TRACK=true
+      - ANONYMIZED_TELEMETRY=false
+      - WHISPER_MODEL=base
+      - RAG_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+    volumes:
+      - openwebui_data:/app/backend/data
+    ports:
+      - "8080:8080"
+    depends_on:
+      - ollama
+
 volumes:
   ingest_cache:
   prometheus_data:
+  openwebui_data:
